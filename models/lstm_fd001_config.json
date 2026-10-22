@@ -1,0 +1,31 @@
+{
+    "model": "ImprovedRULLSTM",
+    "dataset": "NASA C-MAPSS FD001",
+    "input_features": [
+        "setting_1",
+        "setting_2",
+        "sensor_2",
+        "sensor_3",
+        "sensor_4",
+        "sensor_5",
+        "sensor_6",
+        "sensor_7",
+        "sensor_8",
+        "sensor_9",
+        "sensor_11",
+        "sensor_12",
+        "sensor_13",
+        "sensor_14",
+        "sensor_15",
+        "sensor_16",
+        "sensor_17",
+        "sensor_20",
+        "sensor_21"
+    ],
+    "sequence_length": 30,
+    "input_size": 19,
+    "target": "uncapped RUL",
+    "test_mae": 17.6053,
+    "test_rmse": 24.0977,
+    "test_r2": 0.6637
+}

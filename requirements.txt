@@ -1,7 +1,21 @@
+# Core data manipulation & scientific computing
 numpy
 pandas
+scipy
+
+# Data visualization
 matplotlib
 seaborn
+
+# Machine learning & explainability
 scikit-learn
+xgboost
+shap
+joblib
+
+# Deep learning framework
+torch
+
+# Interactive development & notebooks
 jupyter
 ipykernel

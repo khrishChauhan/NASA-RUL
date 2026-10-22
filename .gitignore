@@ -1,10 +1,53 @@
+# Virtual environments
 .venv/
+venv/
+env/
+ENV/
+
+# Python byte-code and caches
 __pycache__/
 *.py[cod]
-.ipynb_checkpoints/
-.env
-data/raw/
-data/processed/
-models/
-mlruns/
+*$py.class
+*.so
 .pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# OS and Editor temporary files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.temp
+*~
+.vscode/
+.idea/
+
+# NASA Datasets (exclude raw text files and processed caches while preserving folder structure)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/*.txt
+data/*.csv
+data/*.zip
+data/*.tar.gz
+
+# Experiment Tracking
+mlruns/
+
+# Model Checkpoints & Temporary Artifacts
+# NOTE: Avoid blanket exclusion of models/. Lightweight configs (lstm_fd001_config.json)
+# and scalers (scaler_fd001.joblib) are essential for reproducibility.
+# Exclude intermediate checkpoints and temp files:
+models/*.tmp
+models/checkpoints/
