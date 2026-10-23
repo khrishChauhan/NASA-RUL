@@ -1,4 +1,113 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+export const API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
+).replace(/\/$/, "");
+
+async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (
+      msg.includes("Failed to fetch") ||
+      msg.includes("NetworkError") ||
+      msg.includes("fetch") ||
+      msg.includes("Load failed")
+    ) {
+      throw new Error(
+        "Unable to reach the predictive maintenance API. If the backend is waking up from sleep on Render (free tier), it may take 30–60 seconds for the initial cold start. Please wait a moment and try again."
+      );
+    }
+    throw err;
+  }
+}
+
+async function handleResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    let errorDetail = "An unexpected error occurred.";
+    try {
+      const errorJson = await res.json();
+      errorDetail = errorJson.detail || errorJson.message || JSON.stringify(errorJson);
+    } catch {
+      errorDetail = `HTTP ${res.status}: ${res.statusText}`;
+    }
+    throw new Error(errorDetail);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function fetchHealth(): Promise<HealthResponse> {
+  const res = await apiFetch(`${API_BASE_URL}/api/health`, { cache: "no-store" });
+  return handleResponse<HealthResponse>(res);
+}
+
+export async function fetchOverview(): Promise<OverviewResponse> {
+  const res = await apiFetch(`${API_BASE_URL}/api/overview`, { cache: "no-store" });
+  return handleResponse<OverviewResponse>(res);
+}
+
+export async function fetchEngines(): Promise<EngineListItem[]> {
+  const res = await apiFetch(`${API_BASE_URL}/api/engines`, { cache: "no-store" });
+  return handleResponse<EngineListItem[]>(res);
+}
+
+export async function fetchEngineDetail(engineId: number): Promise<EngineDetailResponse> {
+  const res = await apiFetch(`${API_BASE_URL}/api/engines/${engineId}`, { cache: "no-store" });
+  return handleResponse<EngineDetailResponse>(res);
+}
+
+export async function predictEngine(engineId: number, modelName: string = "ImprovedRULLSTM"): Promise<PredictResponse> {
+  const res = await apiFetch(`${API_BASE_URL}/api/predict`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ engine_id: engineId, model_name: modelName }),
+  });
+  return handleResponse<PredictResponse>(res);
+}
+
+export async function predictUploadCsv(file: File, modelName: string = "ImprovedRULLSTM"): Promise<PredictResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("model_name", modelName);
+
+  const res = await apiFetch(`${API_BASE_URL}/api/predict/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  return handleResponse<PredictResponse>(res);
+}
+
+export async function fetchModelsInfo(): Promise<ModelsResponse> {
+  const res = await apiFetch(`${API_BASE_URL}/api/models`, { cache: "no-store" });
+  return handleResponse<ModelsResponse>(res);
+}
+
+export async function fetchSensorHistory(engineId: number): Promise<SensorHistoryResponse> {
+  const res = await apiFetch(`${API_BASE_URL}/api/sensors/${engineId}`, { cache: "no-store" });
+  return handleResponse<SensorHistoryResponse>(res);
+}
+
+export async function predictSample(): Promise<PredictResponse> {
+  const res = await apiFetch(`${API_BASE_URL}/api/predict/sample`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  return handleResponse<PredictResponse>(res);
+}
+
+export async function fetchSampleTelemetry(): Promise<{
+  label: string;
+  rows: Record<string, number>[];
+  features: string[];
+  total_cycles: number;
+}> {
+  const res = await apiFetch(`${API_BASE_URL}/api/sample`, { cache: "no-store" });
+  return handleResponse<{
+    label: string;
+    rows: Record<string, number>[];
+    features: string[];
+    total_cycles: number;
+  }>(res);
+}
 
 export interface HealthResponse {
   status: string;
@@ -102,93 +211,5 @@ export interface SensorHistoryResponse {
   total_cycles: number;
   available_features: SensorStat[];
   readings: Record<string, number>[];
-}
-
-async function handleResponse<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    let errorDetail = "An unexpected error occurred.";
-    try {
-      const errorJson = await res.json();
-      errorDetail = errorJson.detail || errorJson.message || JSON.stringify(errorJson);
-    } catch {
-      errorDetail = `HTTP ${res.status}: ${res.statusText}`;
-    }
-    throw new Error(errorDetail);
-  }
-  return res.json() as Promise<T>;
-}
-
-export async function fetchHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/health`, { cache: "no-store" });
-  return handleResponse<HealthResponse>(res);
-}
-
-export async function fetchOverview(): Promise<OverviewResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/overview`, { cache: "no-store" });
-  return handleResponse<OverviewResponse>(res);
-}
-
-export async function fetchEngines(): Promise<EngineListItem[]> {
-  const res = await fetch(`${API_BASE_URL}/api/engines`, { cache: "no-store" });
-  return handleResponse<EngineListItem[]>(res);
-}
-
-export async function fetchEngineDetail(engineId: number): Promise<EngineDetailResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/engines/${engineId}`, { cache: "no-store" });
-  return handleResponse<EngineDetailResponse>(res);
-}
-
-export async function predictEngine(engineId: number, modelName: string = "ImprovedRULLSTM"): Promise<PredictResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/predict`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ engine_id: engineId, model_name: modelName }),
-  });
-  return handleResponse<PredictResponse>(res);
-}
-
-export async function predictUploadCsv(file: File, modelName: string = "ImprovedRULLSTM"): Promise<PredictResponse> {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("model_name", modelName);
-
-  const res = await fetch(`${API_BASE_URL}/api/predict/upload`, {
-    method: "POST",
-    body: formData,
-  });
-  return handleResponse<PredictResponse>(res);
-}
-
-export async function fetchModelsInfo(): Promise<ModelsResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/models`, { cache: "no-store" });
-  return handleResponse<ModelsResponse>(res);
-}
-
-export async function fetchSensorHistory(engineId: number): Promise<SensorHistoryResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/sensors/${engineId}`, { cache: "no-store" });
-  return handleResponse<SensorHistoryResponse>(res);
-}
-
-export async function predictSample(): Promise<PredictResponse> {
-  const res = await fetch(`${API_BASE_URL}/api/predict/sample`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
-  return handleResponse<PredictResponse>(res);
-}
-
-export async function fetchSampleTelemetry(): Promise<{
-  label: string;
-  rows: Record<string, number>[];
-  features: string[];
-  total_cycles: number;
-}> {
-  const res = await fetch(`${API_BASE_URL}/api/sample`, { cache: "no-store" });
-  return handleResponse<{
-    label: string;
-    rows: Record<string, number>[];
-    features: string[];
-    total_cycles: number;
-  }>(res);
 }
 

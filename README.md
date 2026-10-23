@@ -258,57 +258,52 @@ NASA-RUL/
 ├── backend/                      # Production FastAPI inference service
 │   ├── app/
 │   │   ├── api/
-│   │   │   └── endpoints.py      # REST endpoints (health, overview, predict, engines, sensors, models)
+│   │   │   └── endpoints.py      # REST endpoints (health, predict, upload, models, sample)
 │   │   ├── core/
-│   │   │   └── config.py         # App configuration & relative artifact resolution
+│   │   │   └── config.py         # App configuration, CORS origins, and path resolution
+│   │   ├── data/
+│   │   │   └── sample_fd001_windows.json # Bundled 30-cycle operational windows for production
 │   │   ├── models/
 │   │   │   └── architectures.py  # PyTorch ImprovedRULLSTM and RULTransformer definitions
 │   │   ├── schemas/
 │   │   │   └── rul.py            # Pydantic request and response schemas
 │   │   ├── services/
-│   │   │   ├── dataset_service.py# C-MAPSS dataset parser & telemetry provider
+│   │   │   ├── dataset_service.py# C-MAPSS dataset parser & sample window provider
 │   │   │   └── model_service.py  # Cached inference service, scaling, and validation
-│   │   └── main.py               # FastAPI application entrypoint with CORS
+│   │   └── main.py               # FastAPI ASGI entrypoint with CORS & exception handling
 │   └── tests/
-│       └── test_api.py           # Automated pytest suite (100% passing)
+│       └── test_api.py           # Automated pytest suite (13 passing tests)
 │
-├── frontend/                     # Next.js 16 App Router analytics dashboard
+├── frontend/                     # Next.js 16 App Router mobile-first interface
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── about/            # Scientific methodology & documentation (/about)
-│   │   │   ├── engines/          # Fleet explorer with per-engine modal inspector (/engines)
-│   │   │   ├── models/           # Benchmark comparative tables & charts (/models)
-│   │   │   ├── predict/          # Dual-mode RUL Prediction Studio (/predict)
-│   │   │   ├── sensors/          # Multi-channel sensor degradation curves (/sensors)
-│   │   │   ├── globals.css       # Tailwind CSS & light analytics theme tokens
+│   │   │   ├── globals.css       # Tailwind CSS & theme tokens
 │   │   │   ├── layout.tsx        # Responsive root application shell
-│   │   │   └── page.tsx          # Fleet overview dashboard & scatter chart (/)
-│   │   ├── components/           # Reusable UI components (Sidebar, Header, MetricCard, StatusBadge)
+│   │   │   └── page.tsx          # Single-page interface with 2 main tabs (Analyze & Compare)
+│   │   ├── components/
+│   │   │   ├── analyze-engine.tsx    # Tab 1: Option A (Generate Sample) & Option B (Upload CSV)
+│   │   │   ├── prediction-result.tsx # Prominent RUL card, condition badge, Recharts telemetry
+│   │   │   ├── model-comparison.tsx  # Tab 2: FD001 benchmark cards, comparison table, MAE chart
+│   │   │   └── ErrorAlert.tsx        # Error banners with retry and cold-start hints
 │   │   └── lib/
-│   │       └── api.ts            # Typed client for backend REST endpoints
+│   │       └── api.ts            # Typed client for backend REST endpoints with cold-start fallback
+│   ├── public/
+│   │   └── sample_sensor_sequence.csv # Downloadable 30-cycle sensor sequence template
 │   ├── package.json
 │   └── tsconfig.json
 │
-├── configs/                      # Experiment configuration files
-│   └── .gitkeep
-├── data/                         # Dataset root (excluded from Git)
-│   ├── raw/                      # Raw C-MAPSS telemetry files
-│   │   ├── cmapss/               # train_FD001.txt, test_FD001.txt, RUL_FD001.txt
-│   │   └── .gitkeep
-│   └── processed/                # Intermediate processed datasets
-│       └── .gitkeep
-├── models/                       # Saved model checkpoints and artifacts
-│   ├── .gitkeep
+├── data/                         # Dataset root (raw text files excluded from Git)
+│   └── raw/
+│       └── cmapss/               # train_FD001.txt, test_FD001.txt, RUL_FD001.txt (local dev)
+├── models/                       # Tracked model checkpoints and artifacts
 │   ├── lstm_fd001.pth            # Trained PyTorch state dict for best LSTM (838 KB)
 │   ├── lstm_fd001_config.json    # Architecture & input feature metadata (675 B)
 │   ├── scaler_fd001.joblib       # Fitted StandardScaler instance (1.5 KB)
 │   └── transformer_fd001.pth     # Trained PyTorch state dict for Transformer (302 KB)
 ├── notebooks/                    # Interactive research notebooks
 │   └── 01_data_exploration.ipynb # End-to-end EDA, training, SHAP, and official evaluation
-├── src/                          # Modular Python source code (pipeline utilities)
-│   └── .gitkeep
-├── tests/                        # Test suites and validation checks
-│   └── .gitkeep
+├── render.yaml                   # Render Blueprint infrastructure-as-code specification
+├── .env.example                  # Environment variable template for backend
 ├── .gitignore                    # Git exclusion rules
 ├── README.md                     # Comprehensive project documentation
 └── requirements.txt              # Production dependency declarations
@@ -316,7 +311,66 @@ NASA-RUL/
 
 ---
 
-## 14. Saved Model Artifacts and How They Are Used
+## 14. Production Deployment Guide (Vercel + Render)
+
+The project is architected for seamless separation of concerns:
+- **Backend**: FastAPI + PyTorch deployed as a Python Web Service on **Render**.
+- **Frontend**: Next.js 16 + React 19 deployed on **Vercel**.
+
+### A. Deploy Backend to Render
+
+1. **Create Web Service**:
+   - Log into [Render Dashboard](https://dashboard.render.com/) and click **New + > Web Service**.
+   - Connect your GitHub repository: `NASA-RUL`.
+2. **Configure Settings**:
+   - **Name**: `nasa-rul-api` (or your preferred name)
+   - **Region**: Choose the region closest to your users (e.g., Oregon or Frankfurt)
+   - **Branch**: `main`
+   - **Root Directory**: `.` (leave empty or specify repository root `.`)
+   - **Runtime**: `Python 3`
+   - **Build Command**:
+     ```bash
+     pip install -r requirements.txt
+     ```
+     *(Optional optimization for faster builds: `pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && pip install --no-cache-dir -r requirements.txt`)*
+   - **Start Command**:
+     ```bash
+     uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+     ```
+3. **Environment Variables**:
+   - `PYTHON_VERSION`: `3.12.7`
+   - `FRONTEND_ORIGIN`: `*` *(or your Vercel frontend URL, e.g., `https://nasa-rul.vercel.app`)*
+4. **Health Check Path**:
+   - Set **Health Check Path** to `/api/health`.
+5. **Deploy**:
+   - Click **Create Web Service**. Once deployed, copy your service URL (e.g., `https://nasa-rul-api.onrender.com`).
+
+> [!NOTE]
+> **Sample Prediction Without Raw Datasets**: The full multi-megabyte C-MAPSS dataset is excluded from Git to keep the repository lightweight. In production on Render, the backend automatically uses the bundled asset `backend/app/data/sample_fd001_windows.json` (containing real 30-cycle operational windows extracted from FD001) to run real PyTorch inference via `models/lstm_fd001.pth` and `models/scaler_fd001.joblib`. Zero hardcoded predictions are ever used.
+
+---
+
+### B. Deploy Frontend to Vercel
+
+1. **Import Project**:
+   - Log into [Vercel](https://vercel.com/) and click **Add New... > Project**.
+   - Import your `NASA-RUL` repository.
+2. **Configure Framework & Root Directory**:
+   - **Framework Preset**: `Next.js` (automatically detected)
+   - **Root Directory**: Click **Edit** and select `frontend`.
+3. **Environment Variables**:
+   - Add the following variable in the Vercel project configuration:
+     - **Name**: `NEXT_PUBLIC_API_URL`
+     - **Value**: Your Render service URL without trailing slash (e.g., `https://nasa-rul-api.onrender.com`).
+4. **Deploy**:
+   - Click **Deploy**. Vercel will build the production bundle and assign a public domain.
+
+> [!TIP]
+> **Handling Free-Tier Cold Starts**: Render's free tier spins down after 15 minutes of inactivity. When a visitor first opens the site, the initial request triggers a spin-up that takes ~30–60 seconds. The frontend includes automatic cold-start detection, displaying a clear advisory message while inference loads rather than failing abruptly.
+
+---
+
+## 15. Saved Model Artifacts and How They Are Used
 
 The `models/` directory houses the essential components needed for zero-training inference reproduction:
 
@@ -340,7 +394,7 @@ The `models/` directory houses the essential components needed for zero-training
 
 ---
 
-## 15. Limitations, Future Improvements, and References
+## 16. Limitations, Future Improvements, and References
 
 ### Limitations
 - **Single Operating Regime**: Evaluated exclusively on FD001 (sea-level condition and single HPC fault mode). Multi-condition subsets (FD002, FD004) require operating condition clustering or normalization.

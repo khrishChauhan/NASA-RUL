@@ -308,6 +308,16 @@ export function AnalyzeEngine() {
         />
       )}
 
+      {/* Loading State Banner with Cold-Start Notice */}
+      {loading && (
+        <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-2.5 text-xs text-blue-800">
+          <RefreshCw className="h-4 w-4 animate-spin text-blue-600 shrink-0" />
+          <span>
+            Communicating with model backend... (Note: Cloud hosting on free tiers such as Render may take 30–60s for cold starts if waking from sleep).
+          </span>
+        </div>
+      )}
+
       {/* Loading Skeleton */}
       {loading && !result && (
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-2xs animate-pulse space-y-4">

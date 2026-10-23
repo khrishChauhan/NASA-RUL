@@ -24,11 +24,19 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS configuration
+# CORS configuration — supports all origins (*) by default, or configured FRONTEND_ORIGIN
+if settings.FRONTEND_ORIGIN == "*":
+    allowed_origins = ["*"]
+else:
+    allowed_origins = [o.strip() for o in settings.FRONTEND_ORIGIN.split(",") if o.strip()]
+    for local_origin in settings.CORS_ORIGINS:
+        if local_origin not in allowed_origins:
+            allowed_origins.append(local_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow Next.js frontend development server
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=False,  # Wildcard origins cannot be combined with allow_credentials=True in CORS spec
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -59,5 +67,8 @@ def root():
     }
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run("backend.app.main:app", host="127.0.0.1", port=8000, reload=True)
+    port = int(os.getenv("PORT", 8000))
+    host = os.getenv("HOST", "0.0.0.0" if os.getenv("RENDER") else "127.0.0.1")
+    uvicorn.run("backend.app.main:app", host=host, port=port, reload=False if os.getenv("RENDER") else True)

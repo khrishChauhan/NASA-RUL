@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -45,10 +46,21 @@ class DatasetService:
         self.rul_df: Optional[pd.DataFrame] = None
         self.sensor_correlations: dict[str, float] = {}
         self.sensor_stats: dict[str, dict[str, float]] = {}
+        self.sample_windows: list[dict[str, Any]] = []
         
         self._load_datasets()
 
     def _load_datasets(self):
+        # 1. Load bundled deployment sample windows (always available in Git & production)
+        if settings.SAMPLE_WINDOWS_PATH.exists():
+            try:
+                with open(settings.SAMPLE_WINDOWS_PATH, "r", encoding="utf-8") as f:
+                    self.sample_windows = json.load(f)
+                print(f"[DatasetService] Loaded {len(self.sample_windows)} bundled sample windows.")
+            except Exception as e:
+                print(f"[DatasetService] Error loading bundled sample windows: {e}")
+
+        # 2. Load raw datasets if present (e.g. local development)
         if settings.TEST_DATA_PATH.exists():
             self.test_df = pd.read_csv(
                 settings.TEST_DATA_PATH,
@@ -87,9 +99,25 @@ class DatasetService:
                         "min": float(round(self.train_df[feat].min(), 3)),
                         "max": float(round(self.train_df[feat].max(), 3)),
                     }
+        elif self.sample_windows:
+            # Populate baseline stats from bundled sample windows when train data is not present
+            all_rows = []
+            for sw in self.sample_windows:
+                all_rows.extend(sw.get("telemetry", []))
+            if all_rows:
+                temp_df = pd.DataFrame(all_rows)
+                for feat in self.selected_features:
+                    if feat in temp_df.columns:
+                        self.sensor_stats[feat] = {
+                            "mean": float(round(temp_df[feat].mean(), 3)),
+                            "std": float(round(temp_df[feat].std(), 3)),
+                            "min": float(round(temp_df[feat].min(), 3)),
+                            "max": float(round(temp_df[feat].max(), 3)),
+                        }
 
     def is_loaded(self) -> bool:
-        return self.test_df is not None and self.rul_df is not None
+        # Loaded if either full dataset is present OR bundled sample windows are ready
+        return (self.test_df is not None and self.rul_df is not None) or len(self.sample_windows) > 0
 
     def get_test_engine_ids(self) -> list[int]:
         if self.test_df is None:
@@ -152,38 +180,51 @@ class DatasetService:
     def get_random_contiguous_sample(self, sequence_length: int = 30) -> tuple[np.ndarray, list[dict[str, Any]], str]:
         """
         Samples a real contiguous 30-cycle operational window from the available FD001 dataset
-        using the exact 19 sensor features only.
+        (or bundled sample asset) using the exact 19 sensor features only.
         Returns: (features_array (30, 19), list_of_dicts_with_relative_cycles, sample_label)
         """
         source_df = self.test_df if self.test_df is not None else self.train_df
-        if source_df is None:
-            raise ValueError("No dataset available to generate sample.")
+        if source_df is not None:
+            engine_ids = sorted(source_df["engine_id"].unique())
+            chosen_id = int(np.random.choice(engine_ids))
+            engine_data = source_df[source_df["engine_id"] == chosen_id].sort_values("cycle")
 
-        engine_ids = sorted(source_df["engine_id"].unique())
-        chosen_id = int(np.random.choice(engine_ids))
-        engine_data = source_df[source_df["engine_id"] == chosen_id].sort_values("cycle")
+            max_start = len(engine_data) - sequence_length
+            if max_start < 0:
+                raise ValueError(f"Engine {chosen_id} has fewer than {sequence_length} cycles.")
 
-        max_start = len(engine_data) - sequence_length
-        if max_start < 0:
-            raise ValueError(f"Engine {chosen_id} has fewer than {sequence_length} cycles.")
+            start_idx = int(np.random.randint(0, max_start + 1)) if max_start > 0 else 0
+            window = engine_data.iloc[start_idx : start_idx + sequence_length]
 
-        start_idx = int(np.random.randint(0, max_start + 1)) if max_start > 0 else 0
-        window = engine_data.iloc[start_idx : start_idx + sequence_length]
+            # Extract features only (never include engine_id or cycle as model features)
+            features_array = window[self.selected_features].to_numpy(dtype=np.float32)
 
-        # Extract features only (never include engine_id or cycle as model features)
-        features_array = window[self.selected_features].to_numpy(dtype=np.float32)
+            # Prepare telemetry dicts with relative cycles 1..30 for inspection
+            telemetry = []
+            for i, (_, row) in enumerate(window.iterrows()):
+                item = {"cycle": i + 1}
+                for col in self.selected_features:
+                    item[col] = round(float(row[col]), 4)
+                telemetry.append(item)
 
-        # Prepare telemetry dicts with relative cycles 1..30 for inspection
-        telemetry = []
-        for i, (_, row) in enumerate(window.iterrows()):
-            item = {"cycle": i + 1}
-            for col in self.selected_features:
-                item[col] = round(float(row[col]), 4)
-            telemetry.append(item)
+            start_c = int(window["cycle"].iloc[0])
+            end_c = int(window["cycle"].iloc[-1])
+            sample_label = f"Sample FD001 (Ref #{chosen_id}, Cycles {start_c}–{end_c})"
+            return features_array, telemetry, sample_label
 
-        start_c = int(window["cycle"].iloc[0])
-        end_c = int(window["cycle"].iloc[-1])
-        sample_label = f"Sample FD001 (Ref #{chosen_id}, Cycles {start_c}–{end_c})"
-        return features_array, telemetry, sample_label
+        elif self.sample_windows:
+            # Fallback for production when full dataset is excluded from Git
+            sample_idx = int(np.random.randint(0, len(self.sample_windows)))
+            sample = self.sample_windows[sample_idx]
+            telemetry = sample["telemetry"]
+            features_array = np.array(
+                [[float(row[col]) for col in self.selected_features] for row in telemetry],
+                dtype=np.float32
+            )
+            sample_label = sample.get("label", "Sample FD001 (30-Cycle Operational Window)")
+            return features_array, telemetry, sample_label
+
+        else:
+            raise ValueError("No dataset or bundled sample asset available to generate sample.")
 
 dataset_service = DatasetService()

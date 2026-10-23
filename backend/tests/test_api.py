@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from backend.app.main import app
+from backend.app.services.dataset_service import dataset_service
 
 client = TestClient(app)
 
@@ -130,4 +131,34 @@ def test_get_sample_endpoint():
     data = response.json()
     assert len(data["rows"]) == 30
     assert len(data["features"]) == 19
+
+def test_production_sample_fallback_without_raw_dataset():
+    """
+    Simulates production deployment where raw dataset files are excluded from Git.
+    Verifies that the bundled sample asset allows real LSTM inference to succeed.
+    """
+    orig_test = dataset_service.test_df
+    orig_train = dataset_service.train_df
+    try:
+        dataset_service.test_df = None
+        dataset_service.train_df = None
+        
+        assert dataset_service.is_loaded() is True
+        
+        res = client.post("/api/predict/sample")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["model_name"] == "ImprovedRULLSTM"
+        assert data["sequence_length_used"] == 30
+        assert isinstance(data["predicted_rul"], (int, float))
+        assert data["predicted_rul"] >= 0.0
+        assert len(data["recent_telemetry"]) == 30
+        
+        sample_res = client.get("/api/sample")
+        assert sample_res.status_code == 200
+        assert len(sample_res.json()["rows"]) == 30
+    finally:
+        dataset_service.test_df = orig_test
+        dataset_service.train_df = orig_train
+
 
