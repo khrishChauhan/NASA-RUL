@@ -32,6 +32,18 @@ desktop.ini
 .vscode/
 .idea/
 
+# Node.js & Frontend builds
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+out/
+frontend/out/
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
 # NASA Datasets (exclude raw text files and processed caches while preserving folder structure)
 data/raw/*
 !data/raw/.gitkeep

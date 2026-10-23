@@ -197,11 +197,37 @@ python -m venv .venv
 > Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 > ```
 
-### 3. Install Dependencies
+### 3. Install Python Dependencies
 ```powershell
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
+
+### 4. Run Backend Tests
+Verify that all model artifacts and API endpoints pass the automated test suite:
+```powershell
+pytest backend/tests/test_api.py -v
+```
+
+### 5. Launch the Platform Locally
+
+The platform consists of a Python FastAPI backend and a Next.js App Router frontend:
+
+#### Terminal 1 — Start the FastAPI Backend:
+```powershell
+# With .venv activated in repository root
+uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+- API Health: `http://127.0.0.1:8000/api/health`
+- Interactive Swagger Documentation: `http://127.0.0.1:8000/docs`
+
+#### Terminal 2 — Start the Next.js Frontend:
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+- Open `http://localhost:3000` in your browser.
 
 ---
 
@@ -229,7 +255,41 @@ Alternatively, open the repository in VS Code or Cursor, select `.venv\Scripts\p
 ```
 NASA-RUL/
 │
-├── configs/                      # Configuration files for experiments
+├── backend/                      # Production FastAPI inference service
+│   ├── app/
+│   │   ├── api/
+│   │   │   └── endpoints.py      # REST endpoints (health, overview, predict, engines, sensors, models)
+│   │   ├── core/
+│   │   │   └── config.py         # App configuration & relative artifact resolution
+│   │   ├── models/
+│   │   │   └── architectures.py  # PyTorch ImprovedRULLSTM and RULTransformer definitions
+│   │   ├── schemas/
+│   │   │   └── rul.py            # Pydantic request and response schemas
+│   │   ├── services/
+│   │   │   ├── dataset_service.py# C-MAPSS dataset parser & telemetry provider
+│   │   │   └── model_service.py  # Cached inference service, scaling, and validation
+│   │   └── main.py               # FastAPI application entrypoint with CORS
+│   └── tests/
+│       └── test_api.py           # Automated pytest suite (100% passing)
+│
+├── frontend/                     # Next.js 16 App Router analytics dashboard
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── about/            # Scientific methodology & documentation (/about)
+│   │   │   ├── engines/          # Fleet explorer with per-engine modal inspector (/engines)
+│   │   │   ├── models/           # Benchmark comparative tables & charts (/models)
+│   │   │   ├── predict/          # Dual-mode RUL Prediction Studio (/predict)
+│   │   │   ├── sensors/          # Multi-channel sensor degradation curves (/sensors)
+│   │   │   ├── globals.css       # Tailwind CSS & light analytics theme tokens
+│   │   │   ├── layout.tsx        # Responsive root application shell
+│   │   │   └── page.tsx          # Fleet overview dashboard & scatter chart (/)
+│   │   ├── components/           # Reusable UI components (Sidebar, Header, MetricCard, StatusBadge)
+│   │   └── lib/
+│   │       └── api.ts            # Typed client for backend REST endpoints
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── configs/                      # Experiment configuration files
 │   └── .gitkeep
 ├── data/                         # Dataset root (excluded from Git)
 │   ├── raw/                      # Raw C-MAPSS telemetry files

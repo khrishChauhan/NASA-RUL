@@ -19,3 +19,11 @@ torch
 # Interactive development & notebooks
 jupyter
 ipykernel
+
+# Backend API & testing
+fastapi
+uvicorn
+pydantic
+python-multipart
+httpx
+pytest
